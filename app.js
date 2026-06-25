@@ -138,21 +138,41 @@ function receivableSubtotalFor(d, allocation, purchaseAlloc){
   if(actual === null) return need(d) * estimate;
   return bought * actual + pending * estimate;
 }
+function normalizeProductName(s=''){
+  return low(s)
+    .replace(/\s+/g, '')
+    .replace(/[（）()【】\[\]「」『』,，、;；.。]/g, '');
+}
+
+function fieldCompatible(dv, pv){
+  const d = low(dv);
+  const p = low(pv);
+
+  // 双方都没填：不限制
+  if(!d && !p) return true;
+
+  // 只有一方填了：也不阻止匹配
+  // 例如需求没有填购买地，但购买记录填了“松本清”，仍然应该能匹配。
+  if(!d || !p) return true;
+
+  // 双方都填了：要求一致或包含
+  return d === p || d.includes(p) || p.includes(d);
+}
+
 function demandMatchPurchase(d,p){
-  const dp = low(d.product);
-  const pp = low(p.product);
+  const dp = normalizeProductName(d.product);
+  const pp = normalizeProductName(p.product);
   if(!dp || !pp) return false;
 
-  // 商品名允许“完全相同”或“一方包含另一方”
-  // 例如：需求写“3号面膜”，购买写“面膜”时，也可以匹配。
+  // 商品名允许完全相同，也允许一方包含另一方。
+  // 例如：需求“3号面膜10片”，购买“面膜”，可以匹配。
   const productMatched = dp === pp || dp.includes(pp) || pp.includes(dp);
   if(!productMatched) return false;
 
-  // 规格、购买地、类目：只有双方都填写时才要求一致。
-  // 如果需求里是空的，购买记录里填了购买地/类目，不应阻止匹配。
-  if(low(d.spec) && low(p.spec) && low(d.spec) !== low(p.spec)) return false;
-  if(low(d.place) && low(p.place) && low(d.place) !== low(p.place)) return false;
-  if(low(d.category) && low(p.category) && low(d.category) !== low(p.category)) return false;
+  // 规格、购买地、类目只作为“辅助限制”，不能因为一方为空就匹配失败。
+  if(!fieldCompatible(d.spec, p.spec)) return false;
+  if(!fieldCompatible(d.place, p.place)) return false;
+  if(!fieldCompatible(d.category, p.category)) return false;
 
   return true;
 }
