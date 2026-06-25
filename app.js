@@ -109,6 +109,35 @@ function need(d){ return Math.max(1, qty(d.needQty || 1)); }
 function estimatedSubtotal(d){ return need(d) * Math.max(0, num(d.estimatePrice,0)); }
 function purchaseQty(p){ return qty(p.qty); }
 function purchaseSubtotal(p){ return purchaseQty(p) * Math.max(0, num(p.unitPrice,0)); }
+function allocatedForDemand(d, purchaseAlloc){
+  return Object.values(purchaseAlloc || {})
+    .flat()
+    .filter(a => a.demandId === d.id);
+}
+
+function actualUnitPriceFor(d, purchaseAlloc){
+  const lines = allocatedForDemand(d, purchaseAlloc);
+  const totalQty = lines.reduce((s,a)=>s+qty(a.qty),0);
+  if(totalQty <= 0) return null;
+  const totalCost = lines.reduce((s,a)=>s+qty(a.qty)*Math.max(0,num(a.unitPrice,0)),0);
+  return totalCost / totalQty;
+}
+
+function displayUnitPriceFor(d, purchaseAlloc){
+  const actual = actualUnitPriceFor(d, purchaseAlloc);
+  if(actual !== null) return actual;
+  return Math.max(0, num(d.estimatePrice, 0));
+}
+
+function receivableSubtotalFor(d, allocation, purchaseAlloc){
+  const bought = boughtFor(d, allocation);
+  const pending = pendingFor(d, allocation);
+  const actual = actualUnitPriceFor(d, purchaseAlloc);
+  const estimate = Math.max(0, num(d.estimatePrice, 0));
+
+  if(actual === null) return need(d) * estimate;
+  return bought * actual + pending * estimate;
+}
 function demandMatchPurchase(d,p){
   if(!low(p.product)) return false;
   if(low(d.product) !== low(p.product)) return false;
@@ -131,7 +160,14 @@ function computeAllocations(){
       if(gap <= 0) continue;
       const take = Math.min(gap, remain);
       allocation[d.id] += take;
-      purchaseAlloc[p.id].push({demandId:d.id, customerId:d.customerId, product:d.product, qty:take});
+      purchaseAlloc[p.id].push({
+  demandId: d.id,
+  customerId: d.customerId,
+  product: d.product,
+  qty: take,
+  unitPrice: Math.max(0, num(p.unitPrice, 0)),
+  purchaseId: p.id
+});
       remain -= take;
     }
   });
@@ -276,22 +312,22 @@ function renderStats({allocation}){
   const pay = purchases.reduce((s,p)=>s+purchaseSubtotal(p),0);
   $('totalNeed').textContent = tn; $('totalBought').textContent = tb; $('totalPending').textContent = tp; $('totalPaid').textContent = money(pay);
 }
-function renderRows({allocation}){
+function renderRows({allocation, purchaseAlloc}){
   const html = filteredDemands().map(d => {
     const [st,cls] = statusFor(d, allocation);
-    return `<tr><td>${escapeHtml(d.customerId)}</td><td>${escapeHtml(d.customerName)}</td><td>${escapeHtml(d.category)}</td><td>${escapeHtml(d.product)}</td><td>${escapeHtml(d.spec)}</td><td>${escapeHtml(d.place)}</td><td>${need(d)}</td><td>${boughtFor(d, allocation)}</td><td>${pendingFor(d, allocation)}</td><td>${money(d.estimatePrice)}</td><td>${money(estimatedSubtotal(d))}</td><td class="${cls}">${st}</td><td><div class="op"><button onclick="deleteDemand('${d.id}')">删除</button></div></td></tr>`;
+    return `<tr><td>${escapeHtml(d.customerId)}</td><td>${escapeHtml(d.customerName)}</td><td>${escapeHtml(d.category)}</td><td>${escapeHtml(d.product)}</td><td>${escapeHtml(d.spec)}</td><td>${escapeHtml(d.place)}</td><td>${need(d)}</td><td>${boughtFor(d, allocation)}</td><td>${pendingFor(d, allocation)}</td><td>${money(displayUnitPriceFor(d, purchaseAlloc))}</td><td>${money(receivableSubtotalFor(d, allocation, purchaseAlloc))}</td><td class="${cls}">${st}</td><td><div class="op"><button onclick="deleteDemand('${d.id}')">删除</button></div></td></tr>`;
   }).join('');
   $('demandRows').innerHTML = html || '<tr><td colspan="13">暂无需求。可以在上方批量新增。</td></tr>';
 }
 window.deleteDemand = id => { if(confirm('确认删除这条顾客需求？对应购买记录不会删除，但会重新分配。')){ demands = demands.filter(d=>d.id!==id); save(); } };
 window.deletePurchase = id => { if(confirm('确认删除这条购买批次？已买数量会重新计算。')){ purchases = purchases.filter(p=>p.id!==id); save(); } };
-function renderCustomerSummary({allocation}){
+function renderCustomerSummary({allocation, purchaseAlloc}){
   const groups = groupBy(demands, d => d.customerId || '未填ID');
   const html = Object.entries(groups).sort().map(([cid, list]) => {
     const name = list.find(d=>d.customerName)?.customerName || '';
     const ship = list.find(d=>d.shipping)?.shipping || '';
     const items = list.map(d => `${d.category?d.category+'｜':''}${d.product}${d.spec?'（'+d.spec+'）':''} ×${need(d)}，已买${boughtFor(d,allocation)}，待买${pendingFor(d,allocation)}`).join('\n');
-    const tn=list.reduce((s,d)=>s+need(d),0), tb=list.reduce((s,d)=>s+boughtFor(d,allocation),0), tp=list.reduce((s,d)=>s+pendingFor(d,allocation),0), est=list.reduce((s,d)=>s+estimatedSubtotal(d),0);
+    const tn=list.reduce((s,d)=>s+need(d),0), tb=list.reduce((s,d)=>s+boughtFor(d,allocation),0), tp=list.reduce((s,d)=>s+pendingFor(d,allocation),0), est=list.reduce((s,d)=>s+receivableSubtotalFor(d, allocation, purchaseAlloc),0);
     return `<div class="card"><h3>${escapeHtml(cid)} ${escapeHtml(name)}</h3><div class="items">${escapeHtml(items)}</div><p>总需求 ${tn}｜已买 ${tb}｜待买 ${tp}｜应收预估 ${money(est)}</p>${ship?`<p>收货信息：${escapeHtml(ship)}</p>`:''}</div>`;
   }).join('');
   $('customerSummary').innerHTML = html || '<p>暂无顾客汇总。</p>';
