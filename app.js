@@ -139,11 +139,21 @@ function receivableSubtotalFor(d, allocation, purchaseAlloc){
   return bought * actual + pending * estimate;
 }
 function demandMatchPurchase(d,p){
-  if(!low(p.product)) return false;
-  if(low(d.product) !== low(p.product)) return false;
-  if(p.spec && low(d.spec) !== low(p.spec)) return false;
-  if(p.place && low(d.place) !== low(p.place)) return false;
-  if(p.category && low(d.category) !== low(p.category)) return false;
+  const dp = low(d.product);
+  const pp = low(p.product);
+  if(!dp || !pp) return false;
+
+  // 商品名允许“完全相同”或“一方包含另一方”
+  // 例如：需求写“3号面膜”，购买写“面膜”时，也可以匹配。
+  const productMatched = dp === pp || dp.includes(pp) || pp.includes(dp);
+  if(!productMatched) return false;
+
+  // 规格、购买地、类目：只有双方都填写时才要求一致。
+  // 如果需求里是空的，购买记录里填了购买地/类目，不应阻止匹配。
+  if(low(d.spec) && low(p.spec) && low(d.spec) !== low(p.spec)) return false;
+  if(low(d.place) && low(p.place) && low(d.place) !== low(p.place)) return false;
+  if(low(d.category) && low(p.category) && low(d.category) !== low(p.category)) return false;
+
   return true;
 }
 function computeAllocations(){
