@@ -1,5 +1,12 @@
-const CACHE = 'daigou-app-v3-mobilefix';
-const ASSETS = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest', './icon.svg'];
+const CACHE = 'daigou-app-v4-dev';
+const ASSETS = [
+  './',
+  './index.html',
+  './styles.css?v=20260626a',
+  './app.js?v=20260626a',
+  './manifest.webmanifest',
+  './icon.svg'
+];
 
 self.addEventListener('install', e => {
   self.skipWaiting();
@@ -8,9 +15,9 @@ self.addEventListener('install', e => {
 
 self.addEventListener('activate', e => {
   e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-    ).then(() => self.clients.claim())
+    caches.keys()
+      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
 });
 
