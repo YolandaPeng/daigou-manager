@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#0f172a" />
+  <title>代购管理 Pro</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <h1>代购管理 Pro</h1>
+      <p>微信接龙导入 · 批量新增需求 · 批量登记已购 · 按购买地筛选待买清单</p>
+    </div>
+    <div class="header-actions">
+      <button id="installBtn" class="ghost" hidden>安装到手机</button>
+      <button id="backupBtn" class="primary">导出备份</button>
+      <label class="ghost file-label">导入备份<input id="importFile" type="file" accept=".json" hidden></label>
+    </div>
+  </header>
+
+  <main>
+    <section class="stats">
+      <div class="stat"><span>总需求</span><strong id="totalNeed">0</strong></div>
+      <div class="stat"><span>已分配购买</span><strong id="totalBought">0</strong></div>
+      <div class="stat"><span>待买</span><strong id="totalPending">0</strong></div>
+      <div class="stat"><span>实付总额</span><strong id="totalPaid">¥0.00</strong></div>
+    </section>
+
+
+
+    <section class="panel input-panel">
+      <div class="panel-title-row">
+        <h2>0. 从微信接龙原文导入</h2>
+        <button id="clearSolitaireBtn" class="ghost">清空接龙</button>
+      </div>
+      <p class="hint">直接粘贴微信群里的接龙原文。系统会自动识别“序号 + 微信名 + 商品内容”。微信名会作为顾客标识；商品会先进入预览区，确认后再加入需求。</p>
+      <div class="example">示例：1. 生闷气大王 3/4面膜10片 绿豆洗面奶一套 喷雾面霜1瓶</div>
+      <textarea id="solitaireText" rows="5" placeholder="#接龙&#10;oy接龙&#10;&#10;1. 生闷气大王 3/4面膜10片 绿豆洗面奶一套 喷雾面霜1瓶&#10;2. ARMY 3号面膜10片&#10;3. 废比寻常 too cool for school卧蚕笔09 medipeel撕拉面膜蓝色"></textarea>
+      <div class="form-actions">
+        <button id="parseSolitaireBtn" class="primary">解析接龙并预览</button>
+      </div>
+      <div id="solitairePreviewWrap" class="preview-wrap" hidden>
+        <h3>接龙解析预览</h3>
+        <p class="hint">请检查微信名和商品拆分是否正确。商品拆错时，可以直接在预览表里修改；一行就是一个需求。</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>微信名/顾客标识</th><th>类目</th><th>商品内容</th><th>规格</th><th>购买地</th><th>数量</th><th>预估单价</th><th>操作</th></tr></thead>
+            <tbody id="solitairePreviewRows"></tbody>
+          </table>
+        </div>
+        <div class="form-actions">
+          <button id="confirmSolitaireBtn" class="primary">确认加入需求</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel input-panel">
+      <div class="panel-title-row">
+        <h2>1. 批量新增顾客需求</h2>
+        <button id="clearDemandBtn" class="ghost">清空输入</button>
+      </div>
+      <p class="hint">一行一个需求。最少填：顾客ID、商品、数量。支持 Tab、逗号、中文逗号分隔。推荐顺序如下。</p>
+      <div class="example">顾客ID,顾客姓名,商品类目,商品/链接,规格备注,购买地,需要数量,预估单价,收货信息,备注</div>
+      <textarea id="demandBatch" rows="5" placeholder="例如：&#10;C001,张三,护肤,面膜,蓝色10片,松本清,2,35,张三 090xxxx 东京都...,先买2盒&#10;C001,张三,洁面,洗面奶,普通款,松本清,1,48,,&#10;C002,李四,日用品,棉片,80片,大国药妆,5,12,,"></textarea>
+      <div class="form-actions">
+        <button id="addDemandsBtn" class="primary">批量加入需求</button>
+      </div>
+    </section>
+
+    <section class="panel input-panel">
+      <div class="panel-title-row">
+        <h2>2. 批量登记已购买</h2>
+        <button id="clearPurchaseBtn" class="ghost">清空输入</button>
+      </div>
+      <p class="hint">一行一个已购物品。系统会自动把购买数量分配给仍有待买数量的顾客需求。商品名必须能匹配；规格/购买地/类目填了就作为更精确匹配条件，不填则不限制。</p>
+      <div class="example">商品/链接,购买数量,实付单价,规格备注,购买地,商品类目,备注</div>
+      <textarea id="purchaseBatch" rows="4" placeholder="例如：&#10;面膜,10,32,蓝色10片,松本清,护肤,6月25日采购&#10;棉片,5,10,,大国药妆,日用品,&#10;洗面奶,6,45,普通款,松本清,洁面,"></textarea>
+      <div class="receipt-row">
+        <label class="receipt-label">小票图片，可选<input id="receiptFile" type="file" accept="image/*" multiple></label>
+        <span id="receiptInfo" class="hint">未选择图片</span>
+      </div>
+      <div class="form-actions">
+        <button id="addPurchasesBtn" class="primary">批量登记购买</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-title-row">
+        <h2>需求主记录</h2>
+        <input id="searchBox" class="search" placeholder="搜索顾客ID、姓名、商品、类目、购买地...">
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>顾客ID</th><th>姓名</th><th>类目</th><th>商品/链接</th><th>规格</th><th>购买地</th>
+              <th>要</th><th>已买</th><th>待买</th><th>预估单价</th><th>应收预估</th><th>状态</th><th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="demandRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="two-col">
+      <div class="panel">
+        <h2>顾客汇总</h2>
+        <div id="customerSummary" class="cards"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title-row compact">
+          <h2>按商品类目待买清单</h2>
+          <select id="placeFilter" class="search small-select"><option value="">全部购买地</option></select>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>类目</th><th>商品/链接</th><th>规格</th><th>购买地</th><th>总需求</th><th>已买</th><th>还需买</th></tr></thead>
+            <tbody id="shoppingSummary"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-title-row">
+        <h2>购买批次记录</h2>
+        <span class="hint">用于追溯：每次批量购买、小票图片、单价都在这里。</span>
+      </div>
+      <div id="purchaseCards" class="cards"></div>
+    </section>
+  </main>
+
+  <footer>数据保存在当前浏览器本地。小票图片会压缩后保存，但仍建议定期导出 JSON 备份。</footer>
+  <script src="app.js"></script>
+</body>
+</html>
