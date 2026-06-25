@@ -343,9 +343,10 @@ function renderStats({allocation}){
   $('totalNeed').textContent = tn; $('totalBought').textContent = tb; $('totalPending').textContent = tp; $('totalPaid').textContent = money(pay);
 }
 function renderRows({allocation, purchaseAlloc}){
-  const html = filteredDemands().map(d => {
+  const rows = filteredDemands();
+  const html = rows.map((d, i) => {
     const [st,cls] = statusFor(d, allocation);
-    return `<tr><td>${escapeHtml(d.customerId)}</td><td>${escapeHtml(d.customerName)}</td><td>${escapeHtml(d.category)}</td><td>${escapeHtml(d.product)}</td><td>${escapeHtml(d.spec)}</td><td>${escapeHtml(d.place)}</td><td>${need(d)}</td><td>${boughtFor(d, allocation)}</td><td>${pendingFor(d, allocation)}</td><td>${money(displayUnitPriceFor(d, purchaseAlloc))}</td><td>${money(receivableSubtotalFor(d, allocation, purchaseAlloc))}</td><td class="${cls}">${st}</td><td><div class="op"><button onclick="deleteDemand('${d.id}')">删除</button></div></td></tr>`;
+    return `<tr><td>${i + 1}</td><td>${escapeHtml(d.customerId)}</td><td>${escapeHtml(d.category)}</td><td>${escapeHtml(d.product)}</td><td>${escapeHtml(d.spec)}</td><td>${escapeHtml(d.place)}</td><td>${need(d)}</td><td>${boughtFor(d, allocation)}</td><td>${pendingFor(d, allocation)}</td><td>${money(displayUnitPriceFor(d, purchaseAlloc))}</td><td>${money(receivableSubtotalFor(d, allocation, purchaseAlloc))}</td><td class="${cls}">${st}</td><td><div class="op"><button onclick="deleteDemand('${d.id}')">删除</button></div></td></tr>`;
   }).join('');
   $('demandRows').innerHTML = html || '<tr><td colspan="13">暂无需求。可以在上方批量新增。</td></tr>';
 }
