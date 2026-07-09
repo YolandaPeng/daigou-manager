@@ -423,51 +423,95 @@ $('receiptFile').addEventListener('change', async e => {
 $('addDemandsBtn').onclick = async () => {
   const lines = $('demandBatch').value.split(/\r?\n/).map(norm).filter(Boolean);
   if(!lines.length){ alert('请先输入需求内容'); return; }
+
   const now = new Date().toISOString();
   let added = 0, skipped = [];
-  lines.forEach((line, idx) => {
+
+  for (let idx = 0; idx < lines.length; idx++) {
+    const line = lines[idx];
     const c = parseLine(line);
     const d = {
-      id: uid('D'), customerId:c[0]||'', customerName:c[1]||'', category:c[2]||'', product:c[3]||'', spec:c[4]||'', place:c[5]||'',
-      needQty: Math.max(1, qty(c[6] || 1)), estimatePrice: Math.max(0, num(c[7],0)), shipping:c[8]||'', note:c[9]||'', tracking:'', createdAt:now, updatedAt:now
+      id: uid('D'),
+      customerId: c[0] || '',
+      customerName: c[1] || '',
+      category: c[2] || '',
+      product: c[3] || '',
+      spec: c[4] || '',
+      place: c[5] || '',
+      needQty: Math.max(1, qty(c[6] || 1)),
+      estimatePrice: Math.max(0, num(c[7], 0)),
+      shipping: c[8] || '',
+      note: c[9] || '',
+      tracking: '',
+      createdAt: now,
+      updatedAt: now
     };
-    if(!d.customerId || !d.product){ skipped.push(idx+1); return; }
-    demands.push(d);
-try{
-  await upsertDemand(d);
-  added++;
-}catch(err){
-  console.error(err);
-  skipped.push(idx+1);
-}
-  });
+
+    if(!d.customerId || !d.product){
+      skipped.push(idx + 1);
+      continue;
+    }
+
+    try{
+      await upsertDemand(d);
+      demands.push(d);
+      added++;
+    }catch(err){
+      console.error('新增需求失败：', err);
+      skipped.push(idx + 1);
+    }
+  }
+
   save();
   $('demandBatch').value = '';
-  alert(`已新增 ${added} 条需求${skipped.length ? `；第 ${skipped.join('、')} 行缺少顾客ID或商品，已跳过` : ''}`);
+  alert(`已新增 ${added} 条需求${skipped.length ? `；第 ${skipped.join('、')} 行写入失败或缺少顾客ID/商品，已跳过` : ''}`);
 };
 $('clearDemandBtn').onclick = () => { $('demandBatch').value = ''; };
 
 $('addPurchasesBtn').onclick = async () => {
   const lines = $('purchaseBatch').value.split(/\r?\n/).map(norm).filter(Boolean);
   if(!lines.length){ alert('请先输入已购买内容'); return; }
+
   const now = new Date().toISOString();
   let added = 0, skipped = [];
-  lines.forEach((line, idx) => {
+
+  for (let idx = 0; idx < lines.length; idx++) {
+    const line = lines[idx];
     const c = parseLine(line);
-    const p = { id: uid('P'), product:c[0]||'', qty:qty(c[1]||0), unitPrice:Math.max(0,num(c[2],0)), spec:c[3]||'', place:c[4]||'', category:c[5]||'', note:c[6]||'', receiptImages, createdAt:now };
-    if(!p.product || p.qty <= 0){ skipped.push(idx+1); return; }
-    purchases.push(p);
-try{
-  await upsertPurchase(p);
-  added++;
-}catch(err){
-  console.error(err);
-  skipped.push(idx+1);
-}
-  });
+    const p = {
+      id: uid('P'),
+      product: c[0] || '',
+      qty: qty(c[1] || 0),
+      unitPrice: Math.max(0, num(c[2], 0)),
+      spec: c[3] || '',
+      place: c[4] || '',
+      category: c[5] || '',
+      note: c[6] || '',
+      receiptImages,
+      createdAt: now
+    };
+
+    if(!p.product || p.qty <= 0){
+      skipped.push(idx + 1);
+      continue;
+    }
+
+    try{
+      await upsertPurchase(p);
+      purchases.push(p);
+      added++;
+    }catch(err){
+      console.error('登记购买失败：', err);
+      skipped.push(idx + 1);
+    }
+  }
+
   save();
-  $('purchaseBatch').value = ''; $('receiptFile').value = ''; receiptImages = []; $('receiptInfo').textContent = '未选择图片';
-  alert(`已登记 ${added} 条购买记录${skipped.length ? `；第 ${skipped.join('、')} 行缺少商品或数量，已跳过` : ''}`);
+  $('purchaseBatch').value = '';
+  $('receiptFile').value = '';
+  receiptImages = [];
+  $('receiptInfo').textContent = '未选择图片';
+  alert(`已登记 ${added} 条购买记录${skipped.length ? `；第 ${skipped.join('、')} 行写入失败或缺少商品/数量，已跳过` : ''}`);
 };
 $('clearPurchaseBtn').onclick = () => { $('purchaseBatch').value = ''; $('receiptFile').value = ''; receiptImages = []; $('receiptInfo').textContent='未选择图片'; };
 $('searchBox').addEventListener('input', render);
