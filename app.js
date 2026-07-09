@@ -390,20 +390,50 @@ $('parseSolitaireBtn').onclick = () => {
   renderSolitairePreview();
 };
 $('clearSolitaireBtn').onclick = () => { $('solitaireText').value = ''; pendingSolitaireRows = []; renderSolitairePreview(); };
-$('confirmSolitaireBtn').onclick = () => {
+$('confirmSolitaireBtn').onclick = async () => {
   const now = new Date().toISOString();
   let added = 0, skipped = [];
-  pendingSolitaireRows.forEach((r, idx)=>{
+
+  for (let idx = 0; idx < pendingSolitaireRows.length; idx++) {
+    const r = pendingSolitaireRows[idx];
     const d = {
-      id: uid('D'), customerId:norm(r.customerId), customerName:norm(r.customerId), category:norm(r.category), product:norm(r.product), spec:norm(r.spec), place:norm(r.place),
-      needQty: Math.max(1, qty(r.needQty || 1)), estimatePrice: Math.max(0, num(r.estimatePrice,0)), shipping:norm(r.shipping), note:norm(r.note), tracking:'', createdAt:now, updatedAt:now
+      id: uid('D'),
+      customerId: norm(r.customerId),
+      customerName: norm(r.customerId),
+      category: norm(r.category),
+      product: norm(r.product),
+      spec: norm(r.spec),
+      place: norm(r.place),
+      needQty: Math.max(1, qty(r.needQty || 1)),
+      estimatePrice: Math.max(0, num(r.estimatePrice, 0)),
+      shipping: norm(r.shipping),
+      note: norm(r.note),
+      tracking: '',
+      createdAt: now,
+      updatedAt: now
     };
-    if(!d.customerId || !d.product){ skipped.push(idx+1); return; }
-    demands.push(d); added++;
-  });
+
+    if(!d.customerId || !d.product){
+      skipped.push(idx + 1);
+      continue;
+    }
+
+    try{
+      await upsertDemand(d);
+      demands.push(d);
+      added++;
+    }catch(err){
+      console.error('接龙需求写入云端失败：', err);
+      skipped.push(idx + 1);
+    }
+  }
+
   save();
-  pendingSolitaireRows = []; $('solitaireText').value = ''; renderSolitairePreview();
-  alert(`已从接龙加入 ${added} 条需求${skipped.length ? `；预览第 ${skipped.join('、')} 行缺少微信名或商品，已跳过` : ''}`);
+  pendingSolitaireRows = [];
+  $('solitaireText').value = '';
+  renderSolitairePreview();
+
+  alert(`已从接龙加入 ${added} 条需求${skipped.length ? `；预览第 ${skipped.join('、')} 行写入失败或缺少微信名/商品，已跳过` : ''}`);
 };
 
 $('receiptFile').addEventListener('change', async e => {
