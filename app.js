@@ -1,10 +1,17 @@
 const STORAGE_KEY = 'daigou_pro_v2';
 const OLD_KEY = 'daigou_stable_orders_v1';
+
+const SUPABASE_URL = 'https://aebqcuvjrkenwshrzpwi.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlYnFjdXZqcmtlbndzaHJ6cHdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjU5NzIsImV4cCI6MjA5OTE0MTk3Mn0.BdaA4pIp0gPBuZNNvgDvFSzEh18DzPEWq0PH8dku9Yc';
+
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 let demands = [];
 let purchases = [];
 let receiptImages = [];
 let pendingSolitaireRows = [];
 let deferredPrompt = null;
+let cloudReady = false;
 
 const $ = id => document.getElementById(id);
 const norm = (s='') => String(s ?? '').trim();
@@ -211,24 +218,148 @@ function statusFor(d, allocation){
   if(b>0) return ['部分买到','status-warn'];
   return ['待购买','status-bad'];
 }
-function load(){
-  try{
-    const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
-    if(data){ demands = data.demands || []; purchases = data.purchases || []; return render(); }
-  }catch{}
-  try{
-    const old = JSON.parse(localStorage.getItem(OLD_KEY) || '[]');
-    if(Array.isArray(old) && old.length){
-      demands = old.map(o => ({
-        id:o.id || uid('D'), customerId:o.customerId||'', customerName:o.customerName||'', category:o.category||'', product:o.product||'', spec:o.spec||'', place:o.place||'',
-        needQty:o.needQty||1, estimatePrice:o.unitPrice||0, shipping:o.shipping||'', tracking:o.tracking||'', note:o.note||'', createdAt:o.updatedAt||new Date().toISOString(), updatedAt:o.updatedAt||new Date().toISOString()
-      }));
-      purchases = old.filter(o=>qty(o.boughtQty)>0).map(o => ({id:uid('P'), product:o.product||'', category:o.category||'', spec:o.spec||'', place:o.place||'', qty:o.boughtQty||0, unitPrice:o.unitPrice||0, note:'从旧版数据迁移', receiptImages:[], createdAt:o.updatedAt||new Date().toISOString()}));
-    }
-  }catch{}
+function demandToDb(d){
+  return {
+    id: d.id,
+    customer_id: d.customerId || '',
+    customer_name: d.customerName || '',
+    category: d.category || '',
+    product: d.product || '',
+    spec: d.spec || '',
+    place: d.place || '',
+    need_qty: need(d),
+    estimate_price: Math.max(0, num(d.estimatePrice, 0)),
+    shipping: d.shipping || '',
+    tracking: d.tracking || '',
+    note: d.note || '',
+    created_at: d.createdAt || new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+}
+
+function demandFromDb(r){
+  return {
+    id: r.id,
+    customerId: r.customer_id || '',
+    customerName: r.customer_name || '',
+    category: r.category || '',
+    product: r.product || '',
+    spec: r.spec || '',
+    place: r.place || '',
+    needQty: r.need_qty || 1,
+    estimatePrice: Math.max(0, num(r.estimate_price, 0)),
+    shipping: r.shipping || '',
+    tracking: r.tracking || '',
+    note: r.note || '',
+    createdAt: r.created_at || new Date().toISOString(),
+    updatedAt: r.updated_at || new Date().toISOString()
+  };
+}
+
+function purchaseToDb(p){
+  return {
+    id: p.id,
+    product: p.product || '',
+    category: p.category || '',
+    spec: p.spec || '',
+    place: p.place || '',
+    qty: purchaseQty(p),
+    unit_price: Math.max(0, num(p.unitPrice, 0)),
+    note: p.note || '',
+    receipt_images: p.receiptImages || [],
+    created_at: p.createdAt || new Date().toISOString()
+  };
+}
+
+function purchaseFromDb(r){
+  return {
+    id: r.id,
+    product: r.product || '',
+    category: r.category || '',
+    spec: r.spec || '',
+    place: r.place || '',
+    qty: r.qty || 0,
+    unitPrice: Math.max(0, num(r.unit_price, 0)),
+    note: r.note || '',
+    receiptImages: r.receipt_images || [],
+    createdAt: r.created_at || new Date().toISOString()
+  };
+}
+
+async function loadCloudData(){
+  const [demandRes, purchaseRes] = await Promise.all([
+    db.from('demands').select('*').order('created_at', { ascending: true }),
+    db.from('purchases').select('*').order('created_at', { ascending: true })
+  ]);
+
+  if(demandRes.error) throw demandRes.error;
+  if(purchaseRes.error) throw purchaseRes.error;
+
+  demands = (demandRes.data || []).map(demandFromDb);
+  purchases = (purchaseRes.data || []).map(purchaseFromDb);
+
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({
+    version: 3,
+    source: 'supabase',
+    demands,
+    purchases,
+    updatedAt: new Date().toISOString()
+  }));
+
+  cloudReady = true;
   render();
 }
-function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify({version:2,demands,purchases,updatedAt:new Date().toISOString()})); render(); }
+
+async function upsertDemand(d){
+  const { error } = await db.from('demands').upsert(demandToDb(d));
+  if(error) throw error;
+}
+
+async function upsertPurchase(p){
+  const { error } = await db.from('purchases').upsert(purchaseToDb(p));
+  if(error) throw error;
+}
+
+async function deleteCloudDemand(id){
+  const { error } = await db.from('demands').delete().eq('id', id);
+  if(error) throw error;
+}
+
+async function deleteCloudPurchase(id){
+  const { error } = await db.from('purchases').delete().eq('id', id);
+  if(error) throw error;
+}
+async function load(){
+  try{
+    await loadCloudData();
+    return;
+  }catch(err){
+    console.error('云端数据读取失败，改用本地缓存：', err);
+    alert('云端数据读取失败，当前显示本地缓存。请检查 Supabase 配置和网络。');
+  }
+
+  try{
+    const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+    if(data){
+      demands = data.demands || [];
+      purchases = data.purchases || [];
+      return render();
+    }
+  }catch{}
+
+  render();
+}
+
+function save(){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({
+    version: 3,
+    source: 'local-cache',
+    demands,
+    purchases,
+    updatedAt: new Date().toISOString()
+  }));
+  render();
+}
 
 function compressImage(file, maxSide=1200, quality=0.72){
   return new Promise((resolve,reject)=>{
@@ -289,7 +420,7 @@ $('receiptFile').addEventListener('change', async e => {
   }
 });
 
-$('addDemandsBtn').onclick = () => {
+$('addDemandsBtn').onclick = async () => {
   const lines = $('demandBatch').value.split(/\r?\n/).map(norm).filter(Boolean);
   if(!lines.length){ alert('请先输入需求内容'); return; }
   const now = new Date().toISOString();
@@ -301,7 +432,14 @@ $('addDemandsBtn').onclick = () => {
       needQty: Math.max(1, qty(c[6] || 1)), estimatePrice: Math.max(0, num(c[7],0)), shipping:c[8]||'', note:c[9]||'', tracking:'', createdAt:now, updatedAt:now
     };
     if(!d.customerId || !d.product){ skipped.push(idx+1); return; }
-    demands.push(d); added++;
+    demands.push(d);
+try{
+  await upsertDemand(d);
+  added++;
+}catch(err){
+  console.error(err);
+  skipped.push(idx+1);
+}
   });
   save();
   $('demandBatch').value = '';
@@ -309,7 +447,7 @@ $('addDemandsBtn').onclick = () => {
 };
 $('clearDemandBtn').onclick = () => { $('demandBatch').value = ''; };
 
-$('addPurchasesBtn').onclick = () => {
+$('addPurchasesBtn').onclick = async () => {
   const lines = $('purchaseBatch').value.split(/\r?\n/).map(norm).filter(Boolean);
   if(!lines.length){ alert('请先输入已购买内容'); return; }
   const now = new Date().toISOString();
@@ -318,7 +456,14 @@ $('addPurchasesBtn').onclick = () => {
     const c = parseLine(line);
     const p = { id: uid('P'), product:c[0]||'', qty:qty(c[1]||0), unitPrice:Math.max(0,num(c[2],0)), spec:c[3]||'', place:c[4]||'', category:c[5]||'', note:c[6]||'', receiptImages, createdAt:now };
     if(!p.product || p.qty <= 0){ skipped.push(idx+1); return; }
-    purchases.push(p); added++;
+    purchases.push(p);
+try{
+  await upsertPurchase(p);
+  added++;
+}catch(err){
+  console.error(err);
+  skipped.push(idx+1);
+}
   });
   save();
   $('purchaseBatch').value = ''; $('receiptFile').value = ''; receiptImages = []; $('receiptInfo').textContent = '未选择图片';
@@ -350,8 +495,29 @@ function renderRows({allocation, purchaseAlloc}){
   }).join('');
   $('demandRows').innerHTML = html || '<tr><td colspan="13">暂无需求。可以在上方批量新增。</td></tr>';
 }
-window.deleteDemand = id => { if(confirm('确认删除这条顾客需求？对应购买记录不会删除，但会重新分配。')){ demands = demands.filter(d=>d.id!==id); save(); } };
-window.deletePurchase = id => { if(confirm('确认删除这条购买批次？已买数量会重新计算。')){ purchases = purchases.filter(p=>p.id!==id); save(); } };
+window.deleteDemand = async id => {
+  if(!confirm('确认删除这条顾客需求？对应购买记录不会删除，但会重新分配。')) return;
+  try{
+    await deleteCloudDemand(id);
+    demands = demands.filter(d=>d.id!==id);
+    save();
+  }catch(err){
+    console.error(err);
+    alert('删除失败：云端数据库没有删除成功。');
+  }
+};
+
+window.deletePurchase = async id => {
+  if(!confirm('确认删除这条购买批次？已买数量会重新计算。')) return;
+  try{
+    await deleteCloudPurchase(id);
+    purchases = purchases.filter(p=>p.id!==id);
+    save();
+  }catch(err){
+    console.error(err);
+    alert('删除失败：云端数据库没有删除成功。');
+  }
+};
 function renderCustomerSummary({allocation, purchaseAlloc}){
   const groups = groupBy(demands, d => d.customerId || '未填ID');
   const html = Object.entries(groups).sort().map(([cid, list]) => {
